@@ -84,12 +84,21 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build and run tests
+      - name: Run tests and build
         run: |
-          bash ./gradlew --no-daemon build \
+          ./gradlew --no-daemon test build \
             -Pminecraft_version='${{ matrix.minecraft_version }}' \
             -Pfabric_api_version='${{ matrix.fabric_api_version }}' \
             -Parchives_base_name='${{ needs.version.outputs.archive }}-mc-${{ matrix.minecraft_version }}'
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.minecraft_version }}
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: release-jar-${{ matrix.minecraft_version }}
