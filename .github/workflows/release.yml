@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [gradle.properties]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+      jar: ${{ steps.version.outputs.jar }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect mod version change
+        id: version
+        env:
+          BEFORE: ${{ github.event.before }}
+        shell: python
+        run: |
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          def property_value(content, key):
+              for line in content.splitlines():
+                  name, separator, value = line.partition("=")
+                  if separator and name.strip() == key:
+                      return value.strip()
+              return ""
+
+          current = Path("gradle.properties").read_text()
+          previous = ""
+          before = os.environ["BEFORE"]
+          if before != "0" * 40:
+              exists = subprocess.run(
+                  ["git", "cat-file", "-e", f"{before}:gradle.properties"],
+                  capture_output=True,
+              )
+              if exists.returncode == 0:
+                  previous = subprocess.check_output(
+                      ["git", "show", f"{before}:gradle.properties"], text=True
+                  )
+
+          version = property_value(current, "mod_version")
+          archive = property_value(current, "archives_base_name")
+          for value in (version, archive):
+              if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", value):
+                  raise ValueError(f"Invalid version or archive name: {value!r}")
+
+          changed = version != property_value(previous, "mod_version")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"changed={str(changed).lower()}\n")
+              output.write(f"version={version}\n")
+              output.write(f"jar=build/libs/{archive}-{version}.jar\n")
+
+  release:
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and run tests
+        run: bash ./gradlew --no-daemon build
+      - name: Publish release with mod JAR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          JAR: ${{ needs.version.outputs.jar }}
+        run: |
+          test -f "$JAR"
+          gh release create "v$VERSION" "$JAR" \
+            --target "$GITHUB_SHA" \
+            --title "Yuletide $VERSION" \
+            --generate-notes
