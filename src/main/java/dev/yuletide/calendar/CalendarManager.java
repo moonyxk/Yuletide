@@ -24,7 +24,6 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -49,10 +48,10 @@ public final class CalendarManager {
 	private final Set<UUID> testMode = new HashSet<>();
 
 	private MinecraftServer server;
-	private Item claimedItem = Items.YELLOW_WOOL;
-	private Item availableItem = Items.GREEN_WOOL;
-	private Item lockedItem = Items.RED_WOOL;
-	private Item fillItem = Items.RED_STAINED_GLASS_PANE;
+	private Item claimedItem = requiredItem("minecraft:yellow_wool");
+	private Item availableItem = requiredItem("minecraft:green_wool");
+	private Item lockedItem = requiredItem("minecraft:red_wool");
+	private Item fillItem = requiredItem("minecraft:red_stained_glass_pane");
 
 	public CalendarManager(ConfigManager configs, Messages messages, GiftManager gifts) {
 		this.configs = configs;
@@ -83,14 +82,22 @@ public final class CalendarManager {
 		}
 		data.load(server.getWorldPath(LevelResource.ROOT).resolve("data").resolve("yuletide_calendar.json"));
 		Cfg config = configs.config();
-		claimedItem = material(config, "advent-calendar.gui.day-item.claimed", Items.YELLOW_WOOL);
-		availableItem = material(config, "advent-calendar.gui.day-item.available", Items.GREEN_WOOL);
-		lockedItem = material(config, "advent-calendar.gui.day-item.locked", Items.RED_WOOL);
-		fillItem = material(config, "advent-calendar.gui.fill-material", Items.RED_STAINED_GLASS_PANE);
+		claimedItem = material(config, "advent-calendar.gui.day-item.claimed", requiredItem("minecraft:yellow_wool"));
+		availableItem = material(config, "advent-calendar.gui.day-item.available", requiredItem("minecraft:green_wool"));
+		lockedItem = material(config, "advent-calendar.gui.day-item.locked", requiredItem("minecraft:red_wool"));
+		fillItem = material(config, "advent-calendar.gui.fill-material", requiredItem("minecraft:red_stained_glass_pane"));
 	}
 
 	public void stop() {
 		data.save();
+	}
+
+	private static Item requiredItem(String id) {
+		Item item = ItemFactory.item(id);
+		if (item == null) {
+			throw new IllegalStateException("Missing required Minecraft item " + id);
+		}
+		return item;
 	}
 
 	private static Item material(Cfg config, String path, Item fallback) {

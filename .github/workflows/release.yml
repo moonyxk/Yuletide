@@ -14,7 +14,7 @@ jobs:
     outputs:
       changed: ${{ steps.version.outputs.changed }}
       version: ${{ steps.version.outputs.version }}
-      jar: ${{ steps.version.outputs.jar }}
+      archive: ${{ steps.version.outputs.archive }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,14 +60,23 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write(f"changed={str(changed).lower()}\n")
               output.write(f"version={version}\n")
-              output.write(f"jar=build/libs/{archive}-{version}.jar\n")
+              output.write(f"archive={archive}\n")
 
-  release:
+  build:
     needs: version
     if: needs.version.outputs.changed == 'true'
+    name: Build (Minecraft ${{ matrix.minecraft_version }})
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - minecraft_version: '26.1.2'
+            fabric_api_version: '0.155.3+26.1.2'
+          - minecraft_version: '26.2'
+            fabric_api_version: '0.161.0+26.2'
+          - minecraft_version: '26.3'
+            fabric_api_version: '0.166.2+26.3'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -76,15 +85,37 @@ jobs:
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build and run tests
-        run: bash ./gradlew --no-daemon build
-      - name: Publish release with mod JAR
+        run: |
+          bash ./gradlew --no-daemon build \
+            -Pminecraft_version='${{ matrix.minecraft_version }}' \
+            -Pfabric_api_version='${{ matrix.fabric_api_version }}' \
+            -Parchives_base_name='${{ needs.version.outputs.archive }}-mc-${{ matrix.minecraft_version }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-jar-${{ matrix.minecraft_version }}
+          path: build/libs/${{ needs.version.outputs.archive }}-mc-${{ matrix.minecraft_version }}-${{ needs.version.outputs.version }}.jar
+          if-no-files-found: error
+
+  publish:
+    needs: [version, build]
+    if: needs.version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-jar-*
+          path: release-artifacts
+          merge-multiple: true
+      - name: Publish release with mod JARs
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
-          JAR: ${{ needs.version.outputs.jar }}
         run: |
-          test -f "$JAR"
-          gh release create "v$VERSION" "$JAR" \
+          test "$(find release-artifacts -maxdepth 1 -type f -name '*.jar' | wc -l)" -eq 3
+          gh release create "v$VERSION" release-artifacts/*.jar \
             --target "$GITHUB_SHA" \
             --title "Yuletide $VERSION" \
             --generate-notes

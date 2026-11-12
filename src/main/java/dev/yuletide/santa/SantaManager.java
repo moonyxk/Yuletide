@@ -1,5 +1,6 @@
 package dev.yuletide.santa;
 
+import dev.yuletide.MinecraftCompat;
 import dev.yuletide.Yuletide;
 import dev.yuletide.config.Cfg;
 import dev.yuletide.text.Text;
@@ -209,7 +210,7 @@ public final class SantaManager {
 			return false;
 		}
 		entity.snapTo(pos.x, pos.y, pos.z);
-		entity.setInvulnerable(true);
+		MinecraftCompat.setInvulnerable(entity);
 		entity.addTag(TAG);
 		entity.setCustomName(Text.legacy(cfg.str("santa-claus.name", "&c&lSanta Claus")));
 		entity.setCustomNameVisible(cfg.bool("santa-claus.show-name-tag", true));
@@ -251,9 +252,11 @@ public final class SantaManager {
 		if (type.isEmpty()) {
 			Yuletide.LOGGER.warn("Unknown santa-claus.entity-type - using villager");
 		}
-		Entity entity = type.orElse(EntityType.VILLAGER).create(level, EntitySpawnReason.COMMAND);
+		EntityType<?> villagerType = BuiltInRegistries.ENTITY_TYPE.getOptional(Identifier.parse("minecraft:villager"))
+			.orElseThrow(() -> new IllegalStateException("Missing Minecraft villager entity type"));
+		Entity entity = type.orElse(villagerType).create(level, EntitySpawnReason.COMMAND);
 		if (entity == null) {
-			entity = EntityType.VILLAGER.create(level, EntitySpawnReason.COMMAND);
+			entity = villagerType.create(level, EntitySpawnReason.COMMAND);
 		}
 		if (entity instanceof Villager villager) {
 			villager.setVillagerData(villager.getVillagerData()

@@ -68,12 +68,20 @@ public final class Text {
 		if (format == ChatFormatting.RESET) {
 			return Style.EMPTY;
 		}
-		if (format.isColor()) {
+		if (isColor(format)) {
 			// Legacy-Farbwechsel setzen vorherige Effekte wie Fett/Kursiv zurueck.
 			// Reine Formatcodes ergaenzen dagegen den bestehenden Stil.
 			return Style.EMPTY.withColor(format);
 		}
 		return style.applyFormat(format);
+	}
+
+	private static boolean isColor(ChatFormatting format) {
+		return switch (format) {
+			case BLACK, DARK_BLUE, DARK_GREEN, DARK_AQUA, DARK_RED, DARK_PURPLE, GOLD, GRAY,
+				DARK_GRAY, BLUE, GREEN, AQUA, RED, LIGHT_PURPLE, YELLOW, WHITE -> true;
+			default -> false;
+		};
 	}
 
 	private static boolean isHex(String s, int from, int to) {

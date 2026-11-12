@@ -1,5 +1,6 @@
 package dev.yuletide.util;
 
+import dev.yuletide.MinecraftCompat;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
@@ -17,7 +18,7 @@ public final class Inventories {
 			player.getInventory().add(part);
 			// add veraendert part: Es bleibt nur der nicht einsortierte Rest uebrig.
 			if (!part.isEmpty()) {
-				player.drop(part, false);
+				MinecraftCompat.drop(player, part);
 			}
 		}
 	}
