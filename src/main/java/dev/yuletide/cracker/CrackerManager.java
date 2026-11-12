@@ -27,16 +27,22 @@ import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
 
-/** Knallbonbons: normale Items mit der Komponente {@code cracker_type}; Erkennung erfolgt nie über den Namen. */
+/**
+ * Knallbonbons sind Vanilla-Items mit dem Schluessel {@code cracker_type} in CUSTOM_DATA.
+ * Diese gespeicherte Typ-ID statt des sichtbaren Namens bestimmt die Funktion;
+ * blosses Umbenennen eines normalen Items macht daraus also keinen Cracker.
+ */
 public final class CrackerManager {
 	public static final String DATA_KEY = "cracker_type";
 
+	/** Geladene Vorlage fuer Darstellung und Belohnungen, aus der beliebig viele ItemStacks entstehen koennen. */
 	public record Type(String id, String name, Item material, int modelData, List<String> lore, boolean glow, List<Cfg> rewards) {
 	}
 
 	private final Map<String, Type> types = new LinkedHashMap<>();
 	private boolean enabled;
 
+	/** Baut die Typentabelle neu auf und filtert ungueltige Belohnungseintraege vor der Verwendung. */
 	public void reload() {
 		Cfg cfg = Yuletide.CONFIG.config();
 		enabled = cfg.bool("crackers.enabled", true);
@@ -62,6 +68,7 @@ public final class CrackerManager {
 		}
 	}
 
+	/** Vorpruefung der Konfiguration; die tatsaechlich ausgefuehrten Belohnungsarten stehen in open. */
 	private static boolean validReward(Cfg reward, String id) {
 		String type = reward.str("type", "").toUpperCase();
 		boolean valid = switch (type) {
@@ -94,6 +101,7 @@ public final class CrackerManager {
 		return types.get(id);
 	}
 
+	/** Erzeugt ein ausgabefaehiges Item samt Anzeige und maschinenlesbarer Typ-ID. */
 	public ItemStack create(Type type, int amount) {
 		ItemStack stack = new ItemStack(type.material(), amount);
 		stack.set(DataComponents.CUSTOM_NAME, Text.legacy(type.name()).copy().withStyle(s -> s.withItalic(false)));
@@ -104,16 +112,20 @@ public final class CrackerManager {
 		if (type.glow()) {
 			stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
 		}
+		// CustomModelData ist nur ein Hinweis fuer passende Ressourcenpakete,
+		// nicht die Identifikation des Crackers in der Spiellogik.
 		if (type.modelData() > 0) {
 			stack.set(DataComponents.CUSTOM_MODEL_DATA,
 				new CustomModelData(List.of((float) type.modelData()), List.of(), List.of(), List.of()));
 		}
 		CompoundTag tag = new CompoundTag();
+		// NBT ist Minecrafts Datenformat fuer strukturierte Zusatzdaten an Items und Entities.
 		tag.putString(DATA_KEY, type.id());
 		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
 		return stack;
 	}
 
+	/** Liest die gespeicherte ID und sucht die aktuelle Vorlage; entfernte oder unbekannte Typen ergeben null. */
 	public @Nullable Type typeOf(ItemStack stack) {
 		CustomData data = stack.get(DataComponents.CUSTOM_DATA);
 		if (data == null) {
@@ -126,15 +138,20 @@ public final class CrackerManager {
 	public InteractionResult use(Player player, Level level, InteractionHand hand) {
 		Type type = enabled ? typeOf(player.getItemInHand(hand)) : null;
 		if (type == null) {
+			// PASS laesst Minecraft die normale Rechtsklick-Funktion des Items/Blocks fortsetzen.
 			return InteractionResult.PASS;
 		}
 		if (player instanceof ServerPlayer serverPlayer) {
+			// Inventar und Belohnungen nur serverseitig aendern, niemals doppelt auf Client und Server.
 			open(serverPlayer, hand, type);
 		}
+		// SUCCESS markiert die Interaktion als behandelt, auch auf der Client-Seite.
 		return InteractionResult.SUCCESS;
 	}
 
 	private void open(ServerPlayer player, InteractionHand hand, Type type) {
+		// Genau ein Item aus der verwendeten Hand verbrauchen und ALLE konfigurierten
+		// ITEM-/COMMAND-Belohnungen ausgeben; es wird hier nichts zufaellig ausgewaehlt.
 		player.getItemInHand(hand).shrink(1);
 		player.sendSystemMessage(Yuletide.MESSAGES.getWithMarkup("crackers.opened", "cracker", type.name()));
 		for (Cfg reward : type.rewards()) {
@@ -153,6 +170,7 @@ public final class CrackerManager {
 					player.sendSystemMessage(Yuletide.MESSAGES.get("crackers.received-command-reward"));
 				}
 				default -> {
+					// PERMISSION wird beim Laden akzeptiert, hier aber derzeit nicht ausgefuehrt.
 				}
 			}
 		}

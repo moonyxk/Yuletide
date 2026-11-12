@@ -16,6 +16,7 @@ import net.fabricmc.loader.api.FabricLoader;
 
 /** Lädt config.json, gifts.json und messages.json aus {@code config/yuletide/}; fehlende Dateien werden aus den Standardwerten erzeugt. */
 public final class ConfigManager {
+	// Fabric liefert den passenden Konfigurationsordner fuer Client oder dedizierten Server.
 	private final Path dir = FabricLoader.getInstance().getConfigDir().resolve("yuletide");
 
 	private Cfg config = Cfg.EMPTY;
@@ -43,6 +44,10 @@ public final class ConfigManager {
 		return fallbackMessages;
 	}
 
+	/**
+	 * Liest alle Einstellungen neu ein. Bereits vorhandene Dateien bleiben unveraendert,
+	 * damit eigene Einstellungen und Uebersetzungen beim Reload erhalten bleiben.
+	 */
 	public void load() {
 		try {
 			Files.createDirectories(dir);
@@ -50,12 +55,16 @@ public final class ConfigManager {
 			Yuletide.LOGGER.error("Could not create config directory {}", dir, e);
 		}
 		config = read("config.json", "config.json");
+		// Die Sprache wird zuerst aus config.json bestimmt, danach die Nachrichten geladen.
 		String language = config.str("general.language", "en").toLowerCase();
 		if (!language.equals("de")) {
 			language = "en";
 		}
 		gifts = read("gifts.json", "gifts.json");
+		// Die Sprachwahl bestimmt die Vorlage fuer eine NEUE messages.json.
+		// Eine vorhandene messages.json wird durch einen Sprachwechsel nicht ersetzt.
 		messages = read("messages.json", "messages_" + language + ".json");
+		// Einzelne fehlende Nachrichtenschluessel koennen spaeter auf Englisch zurueckfallen.
 		fallbackMessages = new Cfg(readResource("messages_en.json"));
 	}
 
@@ -78,6 +87,7 @@ public final class ConfigManager {
 		} catch (JsonParseException | IOException e) {
 			Yuletide.LOGGER.error("Could not read {} ({}) - using built-in defaults", file, e.getMessage());
 		}
+		// Fehlerhafte Benutzerdateien nicht ueberschreiben; Standardwerte nur im Speicher verwenden.
 		return new Cfg(readResource(resourceName));
 	}
 
@@ -89,6 +99,7 @@ public final class ConfigManager {
 		}
 	}
 
+	/** Liest eine mitgelieferte Ressource aus dem Klassenpfad, im fertigen Build also aus der Mod-JAR. */
 	private static InputStream open(String name) throws IOException {
 		InputStream in = ConfigManager.class.getResourceAsStream("/yuletide/" + name);
 		if (in == null) {

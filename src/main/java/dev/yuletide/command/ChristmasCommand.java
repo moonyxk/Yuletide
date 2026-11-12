@@ -10,6 +10,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
+/**
+ * Verteilt /christmas auf persoenlichen Schnee, das Santa-Event und Konfigurations-Reload.
+ * Schnee ist fuer Spieler frei nutzbar; Santa-Verwaltung und Reload erfordern Op-Rechte.
+ */
 public final class ChristmasCommand extends CommandBase {
 	@Override
 	protected int execute(CommandSourceStack source, String[] args) {
@@ -33,6 +37,7 @@ public final class ChristmasCommand extends CommandBase {
 		return OK;
 	}
 
+	/** Ohne Stufe umschalten; 0 deaktiviert, 1 bis 5 waehlt die Intensitaet fuer diesen Spieler. */
 	private void snow(CommandSourceStack source, String[] args) {
 		ServerPlayer player = source.getPlayer();
 		if (player == null) {
@@ -65,6 +70,7 @@ public final class ChristmasCommand extends CommandBase {
 		}
 	}
 
+	/** Prueft gemeinsame Rechte einmal vor der Auswahl des Santa-Unterbefehls. */
 	private void santa(CommandSourceStack source, String[] args) {
 		if (!isOp(source)) {
 			reply(source, "general.no-permission");
@@ -95,12 +101,18 @@ public final class ChristmasCommand extends CommandBase {
 		}
 	}
 
+	/**
+	 * Liest {@code santa start [dauer] [random | welt x y z]}.
+	 * Ohne Ortsangabe wird die aktuelle Spielerposition verwendet.
+	 */
 	private void start(CommandSourceStack source, String[] args) {
 		SantaManager santa = Yuletide.SANTA;
 		if (santa.isRunning()) {
 			reply(source, "santa.event-already-running");
 			return;
 		}
+		// args[0] ist "santa", args[1] ist "start". Der Cursor wandert nur weiter,
+		// wenn das optionale Zeitargument tatsaechlich vorhanden ist.
 		int next = 2;
 		int seconds = Yuletide.CONFIG.config().integer("santa-claus.default-duration", 600);
 		if (args.length > next && SantaManager.TIME_PATTERN.matcher(args[next]).matches()) {
@@ -115,6 +127,7 @@ public final class ChristmasCommand extends CommandBase {
 		}
 		ServerLevel level;
 		Vec3 pos;
+		// Welt und drei Koordinaten bilden gemeinsam eine vollstaendige Ortsangabe.
 		if (args.length >= next + 4) {
 			level = SantaManager.findLevel(source.getServer(), args[next]);
 			if (level == null) {
@@ -128,6 +141,7 @@ public final class ChristmasCommand extends CommandBase {
 				return;
 			}
 		} else {
+			// Fuer die Konsole gibt es keine eigene Position als Standardwert.
 			ServerPlayer player = source.getPlayer();
 			if (player == null) {
 				reply(source, "santa.console-needs-coordinates");
@@ -144,6 +158,7 @@ public final class ChristmasCommand extends CommandBase {
 
 	@Override
 	protected List<String> suggest(CommandSourceStack source, String[] args) {
+		// Nach einer optionalen Dauer verschiebt sich auch die Position der Welt-Vorschlaege.
 		List<String> out = new ArrayList<>();
 		boolean op = isOp(source);
 		if (args.length == 1) {

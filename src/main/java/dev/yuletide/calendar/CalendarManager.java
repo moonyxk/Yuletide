@@ -28,6 +28,10 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.level.storage.LevelResource;
 
+/**
+ * Verbindet Kalenderregeln, gespeicherten Fortschritt, Geschenke und GUI.
+ * Ein Menueklick wird hier geprueft, belohnt und anschliessend in CalendarData gespeichert.
+ */
 public final class CalendarManager {
 	/** Slot je Tag (Index 0 = Tag 1). */
 	private static final int[] DAY_SLOTS = {
@@ -41,6 +45,7 @@ public final class CalendarManager {
 	private final Messages messages;
 	private final GiftManager gifts;
 	private final CalendarData data = new CalendarData();
+	// Testmodus ist nur Laufzeitzustand und wird nicht in der Weltdatei gespeichert.
 	private final Set<UUID> testMode = new HashSet<>();
 
 	private MinecraftServer server;
@@ -55,6 +60,7 @@ public final class CalendarManager {
 		this.gifts = gifts;
 	}
 
+	/** Uebersetzt einen GUI-Slot in einen Tag; 0 bedeutet Dekoration statt Tuerchen. */
 	public static int dayForSlot(int slot) {
 		for (int i = 0; i < DAY_SLOTS.length; i++) {
 			if (DAY_SLOTS[i] == slot) {
@@ -66,6 +72,7 @@ public final class CalendarManager {
 
 	public void start(MinecraftServer server) {
 		this.server = server;
+		// Fortschritt gehoert zur Welt, nicht zur globalen Konfiguration der Mod.
 		data.load(server.getWorldPath(LevelResource.ROOT).resolve("data").resolve("yuletide_calendar.json"));
 		reload();
 	}
@@ -90,6 +97,7 @@ public final class CalendarManager {
 		return ItemFactory.fallbackStack(config.str(path, ""), "config.json " + path, fallback, 1).getItem();
 	}
 
+	/** Verwendet die konfigurierte Zeitzone, damit der Tageswechsel nicht vom Spielerclient abhaengt. */
 	private ZoneId zone() {
 		String id = configs.config().str("advent-calendar.timezone", "");
 		if (id.isBlank()) {
@@ -128,6 +136,10 @@ public final class CalendarManager {
 		return data.isClaimed(today().getYear(), player.getUUID(), day);
 	}
 
+	/**
+	 * Prueft die zeitliche Freigabe und bisherigen Abholungen.
+	 * Der Testmodus umgeht beides, also sind damit auch wiederholte Abholungen moeglich.
+	 */
 	public boolean canClaim(ServerPlayer player, int day) {
 		if (isTestMode(player)) {
 			return true;
@@ -139,11 +151,14 @@ public final class CalendarManager {
 		if (today.getMonth() != Month.DECEMBER) {
 			return false;
 		}
+		// Nachholen erlaubt alle bisherigen Tage; andernfalls nur den heutigen Tag.
 		return configs.config().bool("advent-calendar.allow-previous-days", true) ? day <= today.getDayOfMonth() : day == today.getDayOfMonth();
 	}
 
+	/** Unterscheidet fachliche Ergebnisse, damit die GUI eine passende Nachricht waehlen kann. */
 	public enum ClaimResult { SUCCESS, NOT_AVAILABLE, NO_GIFTS }
 
+	/** Gibt konfigurierte Geschenke aus und markiert den Tag erst danach als abgeholt. */
 	public ClaimResult claim(ServerPlayer player, int day) {
 		if (!canClaim(player, day)) {
 			return ClaimResult.NOT_AVAILABLE;
@@ -170,10 +185,13 @@ public final class CalendarManager {
 		data.resetAll(today().getYear(), player);
 	}
 
+	/** Nutzt ein Vanilla-Truhenmenue; der Client braucht deshalb kein eigenes GUI-Modul. */
 	public void open(ServerPlayer player) {
+		// Neun Slots ergeben eine Reihe. Mindestens fuenf Reihen werden fuer DAY_SLOTS benoetigt.
 		int rows = Math.clamp(configs.config().integer("advent-calendar.gui.size", 54) / 9, 5, 6);
 		MenuType<?> type = rows == 5 ? MenuType.GENERIC_9x5 : MenuType.GENERIC_9x6;
 		Component title = dev.yuletide.text.Text.legacy(configs.config().str("advent-calendar.gui.title", "&c&lAdvent Calendar"));
+		// Jeder Spieler erhaelt einen eigenen Container mit seinem persoenlichen Abholstatus.
 		player.openMenu(new SimpleMenuProvider((id, inventory, p) -> {
 			SimpleContainer container = new SimpleContainer(rows * 9);
 			fill(container, player);
@@ -183,6 +201,8 @@ public final class CalendarManager {
 	}
 
 	private void onClick(ServerPlayer player, int day, CalendarMenu menu) {
+		// Nicht auf die gezeigte Itemfarbe verlassen: Seit dem Oeffnen koennen
+		// Konfiguration, Datum oder Abholstatus bereits anders sein.
 		if (!isEnabled()) {
 			player.sendSystemMessage(messages.get("advent-calendar.disabled"));
 			return;
@@ -202,6 +222,7 @@ public final class CalendarManager {
 		menu.refresh(player, this);
 	}
 
+	/** Baut die Anzeige neu auf; die gezeigten ItemStacks sind Schaltflaechen, keine Belohnungen. */
 	public void fill(SimpleContainer container, ServerPlayer player) {
 		container.clearContent();
 		if (configs.config().bool("advent-calendar.gui.fill-empty-slots", true)) {
@@ -217,6 +238,7 @@ public final class CalendarManager {
 	}
 
 	private ItemStack dayItem(ServerPlayer player, int day) {
+		// Der Status bestimmt Material, Anzeigenamen und Beschreibung (Lore) gemeinsam.
 		String d = String.valueOf(day);
 		String status;
 		Item item;
@@ -241,6 +263,7 @@ public final class CalendarManager {
 	}
 
 	private static Component plain(Component component) {
+		// Benutzerdefinierte Itemtexte sind in Minecraft sonst haeufig standardmaessig kursiv.
 		return component.copy().withStyle(s -> s.withItalic(false));
 	}
 }

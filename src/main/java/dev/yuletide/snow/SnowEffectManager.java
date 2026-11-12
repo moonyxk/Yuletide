@@ -12,15 +12,21 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-/** Schnee nur für Spieler, die ihn aktiviert haben (Zustand bleibt bis zum Serverneustart erhalten). */
+/**
+ * Rein optischer Schneefall fuer einzelne Spieler: Partikel statt Weltwetter oder Schneebloecke.
+ * Spielerwahl bleibt im Speicher bis zum Serverneustart, wird aber nicht auf Festplatte gespeichert.
+ */
 public final class SnowEffectManager {
 	public static final int MAX_LEVEL = 5;
 
+	// Spieler-UUID -> gewaehlte Intensitaet; fehlender Eintrag bedeutet ausgeschaltet.
 	private final Map<UUID, Integer> levels = new HashMap<>();
+	// Intensitaet -> [Partikel pro Tick, horizontaler Radius in Bloecken].
 	private final Map<Integer, int[]> levelValues = new HashMap<>();
 	private final Set<String> disabledWorlds = new HashSet<>();
 	private boolean enabled;
 
+	/** Aktualisiert globale Einstellungen und Stufendaten, behaelt aber die Auswahl der Spieler in levels. */
 	public void reload() {
 		Cfg cfg = Yuletide.CONFIG.config();
 		enabled = cfg.bool("snow-effect.enabled", true);
@@ -32,6 +38,7 @@ public final class SnowEffectManager {
 		}
 		disabledWorlds.clear();
 		for (String world : cfg.strings("snow-effect.disabled-worlds")) {
+			// Kurznamen und volle IDs auf dieselbe Form bringen, damit der spaetere Vergleich passt.
 			disabledWorlds.add(world.contains(":") ? world : "minecraft:" + world);
 		}
 	}
@@ -62,6 +69,7 @@ public final class SnowEffectManager {
 		}
 	}
 
+	/** Erzeugt bei jedem Tick zufaellige Partikelpositionen oberhalb der teilnehmenden Online-Spieler. */
 	public void tick(MinecraftServer server) {
 		if (!enabled || levels.isEmpty()) {
 			return;
@@ -78,6 +86,8 @@ public final class SnowEffectManager {
 				double x = player.getX() + random.nextDouble(-radius, radius);
 				double y = player.getY() + random.nextDouble(5, 15);
 				double z = player.getZ() + random.nextDouble(-radius, radius);
+				// Die Ueberladung mit player als Empfaenger sendet nur diesem Spieler Partikel,
+				// nicht automatisch allen Spielern in der Naehe.
 				player.level().sendParticles(player, ParticleTypes.SNOWFLAKE, true, false, x, y, z, 1, 0, -0.5, 0, 0.02);
 			}
 		}

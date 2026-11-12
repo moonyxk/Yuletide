@@ -9,7 +9,10 @@ import java.util.List;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** Lesezugriff auf ein JsonObject über Punkt-Pfade (z. B. {@code santa-claus.gift-drop.chance}). */
+/**
+ * Lesezugriff auf ein JsonObject ueber Punkt-Pfade, z. B. {@code santa-claus.gift-drop.chance}.
+ * Buendelt JSON-Zugriffe und Standardwerte, damit Spiellogik nicht selbst durch JSON-Baeume navigieren muss.
+ */
 public final class Cfg {
 	public static final Cfg EMPTY = new Cfg(new JsonObject());
 
@@ -23,8 +26,13 @@ public final class Cfg {
 		return root;
 	}
 
+	/**
+	 * Steigt pro Pfadteil eine Objektebene tiefer. {@code @Nullable} kennzeichnet,
+	 * dass fehlende Werte und unpassende Zwischenknoten als null zurueckkommen koennen.
+	 */
 	public @Nullable JsonElement find(String path) {
 		JsonElement current = root;
+		// split erwartet einen regulaeren Ausdruck: "\\." meint einen echten Punkt.
 		for (String part : path.split("\\.")) {
 			if (current == null || !current.isJsonObject()) {
 				return null;
@@ -44,9 +52,11 @@ public final class Cfg {
 	}
 
 	public int integer(String path, int def) {
+		// Der Cast schneidet Nachkommastellen ab, statt die Zahl zu runden.
 		return (int) dbl(path, def);
 	}
 
+	/** Verwendet def bei fehlenden Werten oder einer nicht lesbaren Zahl. */
 	public double dbl(String path, double def) {
 		JsonElement e = find(path);
 		if (e != null && e.isJsonPrimitive()) {
@@ -77,6 +87,7 @@ public final class Cfg {
 		return out;
 	}
 
+	/** Verpackt ein Unterobjekt in denselben Helfer; es ist keine Kopie des JSON-Baums. */
 	public @Nullable Cfg section(String path) {
 		JsonElement e = find(path);
 		return e != null && e.isJsonObject() ? new Cfg(e.getAsJsonObject()) : null;
@@ -98,6 +109,7 @@ public final class Cfg {
 	}
 
 	public Set<String> keys() {
+		// Eigene Menge statt einer veraenderbaren Sicht auf die Schluessel des JSON-Objekts.
 		return new LinkedHashSet<>(root.keySet());
 	}
 

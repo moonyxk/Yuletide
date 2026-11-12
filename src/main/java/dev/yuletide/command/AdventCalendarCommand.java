@@ -8,11 +8,16 @@ import java.util.List;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 
+/**
+ * Spielerzugang zum Kalender: ohne Argumente die GUI oeffnen, mit reset/test administrieren.
+ * Prueft Eingaben und Rechte; die eigentlichen Kalenderregeln liegen im CalendarManager.
+ */
 public final class AdventCalendarCommand extends CommandBase {
 	@Override
 	protected int execute(CommandSourceStack source, String[] args) {
 		CalendarManager calendar = Yuletide.CALENDAR;
 		if (args.length == 0) {
+			// Die Konsole darf Verwaltungsbefehle nutzen, besitzt aber kein Inventar fuer die GUI.
 			ServerPlayer player = source.getPlayer();
 			if (player == null) {
 				reply(source, "general.players-only");
@@ -48,6 +53,7 @@ public final class AdventCalendarCommand extends CommandBase {
 		return OK;
 	}
 
+	/** Setzt nur Daten des aktuellen Kalenderjahres zurueck; das Ziel muss online sein. */
 	private void reset(CommandSourceStack source, String playerName, String dayArg) {
 		ServerPlayer target = onlinePlayer(source, playerName);
 		if (target == null) {
@@ -59,6 +65,8 @@ public final class AdventCalendarCommand extends CommandBase {
 			reply(source, "advent-calendar.reset-all-success", "player", target.getGameProfile().name());
 			return;
 		}
+		// Erst Text in eine Zahl umwandeln, dann den fachlich erlaubten Bereich pruefen.
+		// Eine gueltige Java-Zahl wie 100 ist noch kein gueltiger Kalendertag.
 		int day;
 		try {
 			day = Integer.parseInt(dayArg);
@@ -76,6 +84,8 @@ public final class AdventCalendarCommand extends CommandBase {
 
 	@Override
 	protected List<String> suggest(CommandSourceStack source, String[] args) {
+		// Die Laenge beschreibt die Eingabeposition: Unterbefehl, Spieler, dann Tag/all.
+		// Vorschlaege ersetzen keine Rechtepruefung bei der tatsaechlichen Ausfuehrung.
 		List<String> out = new ArrayList<>();
 		if (!isOp(source)) {
 			return out;

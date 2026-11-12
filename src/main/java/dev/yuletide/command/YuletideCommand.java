@@ -17,6 +17,8 @@ public final class YuletideCommand extends CommandBase {
 			return OK;
 		}
 		String[] rest = Arrays.copyOfRange(args, 1, args.length);
+		// calendar/ cracker sind neue Sammel-Praefixe und werden vor dem Weiterreichen entfernt.
+		// ChristmasCommand erwartet hingegen "snow", "santa" oder "reload" selbst als args[0].
 		switch (args[0].toLowerCase()) {
 			case "calendar" -> calendar.execute(source, rest);
 			case "cracker" -> cracker.execute(source, rest);
@@ -34,6 +36,8 @@ public final class YuletideCommand extends CommandBase {
 				: List.of("calendar", "snow", "cracker");
 		}
 		String[] rest = Arrays.copyOfRange(args, 1, args.length);
+		// Dieselbe Argumentverschiebung wie bei execute, damit Tab-Vervollstaendigung
+		// und tatsaechliche Ausfuehrung immer die gleichen Positionen sehen.
 		return switch (args[0].toLowerCase()) {
 			case "calendar" -> calendar.suggest(source, rest);
 			case "cracker" -> cracker.suggest(source, rest);

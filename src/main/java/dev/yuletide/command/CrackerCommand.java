@@ -9,6 +9,10 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
+/**
+ * Listet Knallbonbon-Typen und gibt deren Items aus.
+ * "give" richtet sich an einen anderen Spieler, "get" an den ausfuehrenden Spieler selbst.
+ */
 public final class CrackerCommand extends CommandBase {
 	private static final List<String> AMOUNTS = List.of("1", "5", "10", "32", "64");
 
@@ -50,6 +54,10 @@ public final class CrackerCommand extends CommandBase {
 		}
 	}
 
+	/**
+	 * Gemeinsamer Ausgabepfad fuer give und get.
+	 * sender darf bei Konsolenausfuehrung null sein; target wird immer als Online-Spieler gesucht.
+	 */
 	private void give(CommandSourceStack source, ServerPlayer sender, String targetName, String typeId, String amountText) {
 		ServerPlayer target = onlinePlayer(source, targetName);
 		if (target == null) {
@@ -61,6 +69,7 @@ public final class CrackerCommand extends CommandBase {
 			reply(source, "crackers.cracker-not-found", "cracker", typeId);
 			return;
 		}
+		// Die Menge ist optional; explizite Angaben sind auf 1 bis 64 begrenzt.
 		int amount = 1;
 		if (amountText != null) {
 			try {
@@ -75,12 +84,15 @@ public final class CrackerCommand extends CommandBase {
 			}
 		}
 		ItemStack stack = Yuletide.CRACKERS.create(type, amount);
+		// Anders als normale Geschenke sollen vergebene Cracker nicht wegen Platzmangel
+		// auf dem Boden landen. Deshalb vor der Ausgabe die gesamte Menge pruefen.
 		if (!Inventories.canFit(target, stack, amount)) {
 			reply(source, "crackers.inventory-full");
 			return;
 		}
 		Inventories.give(target, stack);
 		String senderName = sender == null ? source.getTextName() : sender.getGameProfile().name();
+		// Beim Selbstbezug reicht eine Empfangsmeldung, sonst auch den Absender bestaetigen.
 		if (target != sender) {
 			reply(source, "crackers.given-to-player", "amount", String.valueOf(amount), "cracker", type.id(), "player", target.getGameProfile().name());
 		}
@@ -90,6 +102,7 @@ public final class CrackerCommand extends CommandBase {
 
 	@Override
 	protected List<String> suggest(CommandSourceStack source, String[] args) {
+		// give erwartet Spieler, Typ, Menge; get laesst das Spielerargument weg.
 		List<String> out = new ArrayList<>();
 		boolean op = isOp(source);
 		if (args.length == 1) {

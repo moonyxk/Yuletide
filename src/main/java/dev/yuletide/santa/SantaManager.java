@@ -48,15 +48,18 @@ public final class SantaManager {
 		Items.DIAMOND, Items.EMERALD, Items.GOLD_INGOT, Items.GOLDEN_APPLE,
 		Items.ENCHANTED_GOLDEN_APPLE, Items.COOKIE, Items.CAKE, Items.PUMPKIN_PIE);
 
+	/** Merkt sich eine gesetzte Schneeschicht mit Dimension und Ablaufzeit in Event-Ticks. */
 	private record Trail(ResourceKey<Level> level, BlockPos pos, long expiresAt) {
 	}
 
 	private @Nullable MinecraftServer server;
+	// UUID als Identitaet, Referenz als schneller Zugriff und Dimensionsschluessel fuer die erneute Suche.
 	private @Nullable UUID santa;
 	private @Nullable Entity santaRef;
 	private int goneTicks;
 	private @Nullable ResourceKey<Level> santaLevel;
 	private @Nullable BlockPos forcedChunk;
+	// Verbleibende Laufzeit und bisherige Event-Ticks sind getrennte Zaehler.
 	private int ticksLeft;
 	private long tick;
 	private final List<Trail> trail = new ArrayList<>();
@@ -66,6 +69,10 @@ public final class SantaManager {
 		return santa != null;
 	}
 
+	/**
+	 * Wird am Ende jedes Server-Ticks aufgerufen, nicht in einem eigenen Hintergrund-Thread.
+	 * Dadurch bleiben Entity-Zugriffe und Weltveraenderungen im normalen Serverablauf.
+	 */
 	public void tick(MinecraftServer server) {
 		this.server = server;
 		cleanOrphans();
@@ -75,6 +82,8 @@ public final class SantaManager {
 		tick++;
 		Entity entity = santaEntity();
 		if (entity == null || !entity.isAlive()) {
+			// Bei verschwundener Entity kurz warten, statt schon beim ersten Fehlschlag abzubrechen.
+			// 100 Ticks entsprechen bei normalem Servertakt etwa fuenf Sekunden.
 			if (++goneTicks > 100) {
 				Yuletide.LOGGER.info("Santa entity is gone - ending the event");
 				stop(true);
@@ -87,6 +96,8 @@ public final class SantaManager {
 		removeExpiredTrail(false);
 
 		if (cfg.bool("santa-claus.gift-drop.enabled", true)) {
+			// Konfiguration in Sekunden -> Ticks; Modulo prueft, ob ein Intervall erreicht ist.
+			// Die Prozentchance wird einmal pro Intervall ausgewertet, nicht pro Tick.
 			int interval = Math.max(1, cfg.integer("santa-claus.gift-drop.interval", 5)) * 20;
 			if (tick % interval == 0 && ThreadLocalRandom.current().nextDouble() * 100 < cfg.dbl("santa-claus.gift-drop.chance", 15.0)) {
 				dropGift(level, entity);
@@ -100,6 +111,7 @@ public final class SantaManager {
 		}
 	}
 
+	/** Waehlt aus der festen GIFTS-Liste; diese Drops sind unabhaengig von Kalender-Geschenken in gifts.json. */
 	private void dropGift(ServerLevel level, Entity entity) {
 		ItemStack stack = new ItemStack(GIFTS.get(ThreadLocalRandom.current().nextInt(GIFTS.size())), 1);
 		level.addFreshEntity(new ItemEntity(level, entity.getX(), entity.getY(), entity.getZ(), stack));
@@ -112,17 +124,20 @@ public final class SantaManager {
 			cfg.integer("santa-claus.snow-trail.particle-amount", 10), 0.5, 0.5, 0.5, 0.01);
 		BlockPos at = entity.blockPosition();
 		BlockPos below = at.below();
+		// Nur auf tragfaehigem Boden und in Luft Schnee setzen, keine vorhandenen Bloecke ersetzen.
 		if (level.getBlockState(below).isFaceSturdy(level, below, Direction.UP) && level.getBlockState(at).isAir()) {
 			level.setBlockAndUpdate(at, Blocks.SNOW.defaultBlockState());
 			trail.add(new Trail(level.dimension(), at.immutable(), tick + Math.max(0, cfg.integer("santa-claus.snow-trail.fade-delay", 100))));
 		}
 	}
 
+	/** Entfernt abgelaufenen Schnee; all=true raeumt beim Eventende die gesamte gemerkte Spur auf. */
 	private void removeExpiredTrail(boolean all) {
 		if (server == null) {
 			trail.clear();
 			return;
 		}
+		// Iterator.remove erlaubt Entfernen waehrend des Durchlaufens ohne ConcurrentModificationException.
 		for (Iterator<Trail> it = trail.iterator(); it.hasNext(); ) {
 			Trail t = it.next();
 			if (!all && t.expiresAt() > tick) {
@@ -130,12 +145,14 @@ public final class SantaManager {
 			}
 			it.remove();
 			ServerLevel level = server.getLevel(t.level());
+			// Wurde Schnee inzwischen durch etwas anderes ersetzt, diesen neuen Block nicht loeschen.
 			if (level != null && level.getBlockState(t.pos()).is(Blocks.SNOW)) {
 				level.setBlockAndUpdate(t.pos(), Blocks.AIR.defaultBlockState());
 			}
 		}
 	}
 
+	/** Nutzt die Entity-Referenz, solange sie gueltig ist, sonst eine Suche per UUID in der gemerkten Dimension. */
 	private @Nullable Entity santaEntity() {
 		if (santaRef != null && !santaRef.isRemoved()) {
 			return santaRef;
@@ -164,6 +181,7 @@ public final class SantaManager {
 	/** Entfernt Santa-Wesen, die nach einem Absturz oder Neustart übrig geblieben sind (Fehler 13). */
 	public void onEntityLoad(Entity entity) {
 		if (entity.entityTags().contains(TAG) && (santa == null || !entity.getUUID().equals(santa))) {
+			// Nur vormerken: Das eigentliche Entfernen erfolgt im Tick, nicht mitten im Entity-Ladevorgang.
 			orphans.add(entity);
 		}
 	}
@@ -175,6 +193,7 @@ public final class SantaManager {
 		}
 	}
 
+	/** Rueckgabewert fuer Fabric ALLOW_DAMAGE: false schuetzt nur den aktuell registrierten Santa. */
 	public boolean allowDamage(Entity entity) {
 		return santa == null || !entity.getUUID().equals(santa);
 	}
@@ -198,12 +217,16 @@ public final class SantaManager {
 			mob.setPersistenceRequired();
 		}
 		BlockPos block = BlockPos.containing(pos);
+		// Ein Chunk ist 16 Bloecke breit; >> 4 rechnet Block- in Chunk-Koordinaten um.
+		// Den Spawn-Chunk geladen halten, auch wenn gerade kein Spieler in der Naehe ist.
 		level.setChunkForced(block.getX() >> 4, block.getZ() >> 4, true);
 		level.getChunk(block.getX() >> 4, block.getZ() >> 4);
 		server = level.getServer();
+		// Identitaet VOR dem Einfuegen merken: onEntityLoad darf diesen Santa nicht als Altlast einstufen.
 		santa = entity.getUUID();
 		santaLevel = level.dimension();
 		if (!level.addFreshEntity(entity)) {
+			// Bei fehlgeschlagenem Spawn bereits gesetzten Zustand und Chunk-Zwang wieder zuruecknehmen.
 			santa = null;
 			santaLevel = null;
 			level.setChunkForced(block.getX() >> 4, block.getZ() >> 4, false);
@@ -221,6 +244,7 @@ public final class SantaManager {
 		return true;
 	}
 
+	/** Erstellt die konfigurierte Entity; ein Villager dient als Ersatz und erhaelt die Schnee-Variante. */
 	private @Nullable Entity createSanta(ServerLevel level, Cfg cfg) {
 		Identifier id = Identifier.tryParse(cfg.str("santa-claus.entity-type", "minecraft:villager").toLowerCase());
 		Optional<EntityType<?>> type = id == null ? Optional.empty() : BuiltInRegistries.ENTITY_TYPE.getOptional(id).map(t -> (EntityType<?>) t);
@@ -243,6 +267,7 @@ public final class SantaManager {
 	public boolean startRandom(MinecraftServer server, int seconds) {
 		List<Cfg> locations = Yuletide.CONFIG.config().list("santa-claus.spawn-locations");
 		List<Object[]> valid = new ArrayList<>();
+		// Erst ungueltige Welten aussortieren, dann gleichverteilt eine verbleibende Position waehlen.
 		for (Cfg location : locations) {
 			ServerLevel level = findLevel(server, location.str("world", "minecraft:overworld"));
 			if (level != null) {
@@ -261,6 +286,10 @@ public final class SantaManager {
 		return true;
 	}
 
+	/**
+	 * Raeumt Schnee, erzwungenen Spawn-Chunk und Santa-Entity auf, danach den Laufzeitzustand.
+	 * announce=false unterdrueckt die Chatmeldung, etwa beim Herunterfahren des Servers.
+	 */
 	public void stop(boolean announce) {
 		if (santa == null) {
 			return;
@@ -290,6 +319,7 @@ public final class SantaManager {
 		if (entity == null) {
 			return false;
 		}
+		// Leere Relative-Menge bedeutet absolute Zielkoordinaten; die Blickrichtung des Spielers bleibt erhalten.
 		player.teleportTo((ServerLevel) entity.level(), entity.getX(), entity.getY(), entity.getZ(),
 			java.util.Set.<Relative>of(), player.getYRot(), player.getXRot(), true);
 		return true;
@@ -307,6 +337,7 @@ public final class SantaManager {
 			int value = Integer.parseInt(input.substring(0, input.length() - 1));
 			return switch (input.charAt(input.length() - 1)) {
 				case 's' -> value;
+				// multiplyExact wirft bei int-Ueberlauf eine Exception; auch dann greift der Standardwert.
 				case 'm' -> Math.multiplyExact(value, 60);
 				case 'h' -> Math.multiplyExact(value, 3600);
 				default -> 600;
@@ -316,6 +347,7 @@ public final class SantaManager {
 		}
 	}
 
+	/** Kompakte Anzeige in ganzen Sekunden, Minuten oder Stunden; Restanteile werden abgeschnitten. */
 	public static String formatTime(int seconds) {
 		if (seconds < 60) {
 			return seconds + "s";

@@ -3,16 +3,19 @@ package dev.yuletide.util;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
+/** Gemeinsame Inventarlogik fuer Geschenke und Cracker, einschliesslich Stapelgrenzen und Platzpruefung. */
 public final class Inventories {
 	private Inventories() {
 	}
 
 	/** Gibt das Item ins Inventar; was nicht passt, wird beim Spieler gedroppt. Große Mengen werden auf Stapel verteilt. */
 	public static void give(ServerPlayer player, ItemStack stack) {
+		// ItemStack ist veraenderlich: Nur mit einer Kopie arbeiten, damit Vorlagen erhalten bleiben.
 		ItemStack remaining = stack.copy();
 		while (!remaining.isEmpty()) {
 			ItemStack part = remaining.split(Math.min(remaining.getCount(), remaining.getMaxStackSize()));
 			player.getInventory().add(part);
+			// add veraendert part: Es bleibt nur der nicht einsortierte Rest uebrig.
 			if (!part.isEmpty()) {
 				player.drop(part, false);
 			}
@@ -27,6 +30,8 @@ public final class Inventories {
 			if (slot.isEmpty()) {
 				needed -= max;
 			} else if (ItemStack.isSameItemSameComponents(slot, stack)) {
+				// Gleiches Material allein reicht nicht: Name, Zusatzdaten usw. muessen
+				// ebenfalls passen, damit Minecraft Items zu einem Stapel zusammenfuehrt.
 				needed -= Math.max(0, max - slot.getCount());
 			}
 			if (needed <= 0) {

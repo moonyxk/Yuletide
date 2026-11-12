@@ -40,9 +40,12 @@ public final class ItemFactory {
 		if (id == null || id.isBlank()) {
 			return null;
 		}
+		// Minecraft verwendet IDs mit Namensraum, z. B. minecraft:diamond.
+		// tryParse meldet ungueltige Syntax mit null statt mit einer Exception.
 		return Identifier.tryParse(id.trim().toLowerCase().replace(' ', '_'));
 	}
 
+	/** Fuer Anzeigeitems immer ein Ergebnis liefern; bei falscher ID auf ein bekanntes Material ausweichen. */
 	public static ItemStack fallbackStack(String id, String context, Item fallback, int amount) {
 		Item item = item(id);
 		if (item == null) {
@@ -61,6 +64,8 @@ public final class ItemFactory {
 			return null;
 		}
 		ItemStack stack = new ItemStack(item, Math.max(1, entry.integer("amount", 1)));
+		// Moderne Minecraft-Items speichern Zusatzinformationen in typisierten DataComponents:
+		// CUSTOM_NAME ist der Anzeigename, LORE die darunter gezeigte Beschreibung.
 		String name = entry.str("name", "");
 		if (!name.isEmpty()) {
 			stack.set(DataComponents.CUSTOM_NAME, Text.legacy(name).copy().withStyle(style -> style.withItalic(false)));
@@ -75,6 +80,8 @@ public final class ItemFactory {
 		if (!enchants.isEmpty()) {
 			stack.set(DataComponents.ENCHANTMENTS, enchants);
 		}
+		// Gespeicherte Verzauberungen (etwa auf Buechern) sind eine andere Komponente
+		// als direkt wirksame Verzauberungen auf Werkzeugen oder Ruestung.
 		ItemEnchantments stored = enchantments(entry.strings("stored-enchantments"), registries, context);
 		if (!stored.isEmpty()) {
 			stack.set(DataComponents.STORED_ENCHANTMENTS, stored);
@@ -85,10 +92,14 @@ public final class ItemFactory {
 	/** Format {@code name:level} bzw. {@code namespace:name:level}; Level 1, wenn nicht angegeben. */
 	public static ItemEnchantments enchantments(List<String> specs, HolderLookup.Provider registries, String context) {
 		ItemEnchantments.Mutable result = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+		// Verzauberungen werden aus den Registries der laufenden Welt aufgeloest,
+		// sodass auch durch Datenpakete geladene Eintraege auffindbar sind.
 		HolderLookup.RegistryLookup<Enchantment> lookup = registries.lookupOrThrow(Registries.ENCHANTMENT);
 		for (String spec : specs) {
 			String idPart = spec;
 			int level = 1;
+			// Nur den LETZTEN Doppelpunkt als moegliche Level-Trennung betrachten.
+			// Bei "minecraft:sharpness" ist der letzte Teil keine Zahl und bleibt Teil der ID.
 			int colon = spec.lastIndexOf(':');
 			if (colon >= 0) {
 				try {
@@ -105,6 +116,7 @@ public final class ItemFactory {
 			}
 			result.set(holder.get(), Math.max(1, level));
 		}
+		// Zum Aufbau veraenderlich, fuer die fertige Item-Komponente unveraenderlich.
 		return result.toImmutable();
 	}
 }

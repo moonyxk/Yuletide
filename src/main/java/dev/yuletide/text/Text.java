@@ -23,6 +23,8 @@ public final class Text {
 	 * damit Farbcodes in Spielernamen o. Ä. nicht interpretiert werden.
 	 */
 	public static Component legacy(String input, Map<String, String> placeholders) {
+		// Kleine Parser-Zustandsmaschine: style gilt fuer den aktuell gesammelten Text
+		// im buffer; result enthaelt bereits abgeschlossene, formatierte Textteile.
 		MutableComponent result = Component.empty();
 		Style style = Style.EMPTY;
 		StringBuilder buffer = new StringBuilder();
@@ -31,9 +33,11 @@ public final class Text {
 			char c = input.charAt(i);
 			if ((c == '&' || c == '§') && i + 1 < input.length()) {
 				if (input.charAt(i + 1) == '#' && i + 8 <= input.length() && isHex(input, i + 2, i + 8)) {
+					// Erst Text im ALTEN Stil abschliessen, dann auf die neue RGB-Farbe umschalten.
 					flush(result, buffer, style, placeholders);
 					style = Style.EMPTY.withColor(TextColor.fromRgb(Integer.parseInt(input.substring(i + 2, i + 8), 16)));
 					i += 8;
+					// Das gesamte Farbtoken wurde verarbeitet, nicht noch einmal als normalen Text lesen.
 					continue;
 				}
 				ChatFormatting format = ChatFormatting.getByCode(Character.toLowerCase(input.charAt(i + 1)));
@@ -44,6 +48,7 @@ public final class Text {
 					continue;
 				}
 			}
+			// Auch unbekannte oder unvollstaendige Farbcodes bleiben als normaler Text erhalten.
 			buffer.append(c);
 			i++;
 		}
@@ -64,6 +69,8 @@ public final class Text {
 			return Style.EMPTY;
 		}
 		if (format.isColor()) {
+			// Legacy-Farbwechsel setzen vorherige Effekte wie Fett/Kursiv zurueck.
+			// Reine Formatcodes ergaenzen dagegen den bestehenden Stil.
 			return Style.EMPTY.withColor(format);
 		}
 		return style.applyFormat(format);
@@ -78,6 +85,7 @@ public final class Text {
 		return true;
 	}
 
+	/** Haengt einen fertigen Textabschnitt an und leert den Puffer fuer den naechsten Stil. */
 	private static void flush(MutableComponent result, StringBuilder buffer, Style style, Map<String, String> placeholders) {
 		if (buffer.isEmpty()) {
 			return;
@@ -87,6 +95,7 @@ public final class Text {
 		for (Map.Entry<String, String> entry : placeholders.entrySet()) {
 			text = text.replace("{" + entry.getKey() + "}", entry.getValue());
 		}
+		// literal interpretiert eingesetzte Werte nicht erneut als Farbcode oder Minecraft-Uebersetzungsschluessel.
 		result.append(Component.literal(text).withStyle(style));
 	}
 }
