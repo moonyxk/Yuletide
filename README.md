@@ -25,6 +25,8 @@ Fabric-Mod für **Minecraft 26.1.2** (Java 25) – Adventskalender, Weihnachtsma
 
 Gruppen stehen in `config.json` unter `gift-groups`. Ein Spieler gehört zu einer Gruppe, wenn er das dort angegebene Entity-Tag trägt (z. B. `/tag <spieler> add christmas_vip`). Die höchste Priorität gewinnt, Fallback ist `default`.
 
+Santa-Geschenke stehen unter `santa-claus.gift-drop.items`; `weight` bestimmt die relative Drop-Chance. Eine `PERMISSION`-Belohnung bei Crackern vergibt das angegebene Entity-Tag an den Spieler, passend zu den Geschenkgruppen.
+
 ## Umfang
 
 Umgesetzt ist **Teil A** der Spezifikation inklusive der Fehlerbehebungen aus Abschnitt 8 sowie `/yuletide`, Deutsch/Englisch (`general.language`), Zeitzone (`advent-calendar.timezone`) und Kalenderfortschritt pro Jahr. Die umfangreichen Inhalts-Features aus **Teil B** (Wichteldorf, Shop, Quests, Mini-Games, Cosmetics usw.) sind bewusst nicht enthalten.

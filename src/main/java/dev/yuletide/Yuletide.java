@@ -48,6 +48,7 @@ public class Yuletide implements ModInitializer {
 		// Hier stehen noch keine Welt und keine Server-Registries zur Verfuegung.
 		// Deshalb zunaechst nur Dateien und weltunabhaengige Einstellungen laden.
 		CONFIG.load();
+		SANTA.reload();
 		SNOW.reload();
 		CRACKERS.reload();
 
@@ -88,6 +89,7 @@ public class Yuletide implements ModInitializer {
 	/** Lädt Konfiguration, Geschenke und Kalenderdaten neu (Santa-Event bleibt unberührt). */
 	public static void reload(MinecraftServer server) {
 		CONFIG.load();
+		SANTA.reload();
 		SNOW.reload();
 		CRACKERS.reload();
 		GIFTS.load(server, CONFIG.gifts(), CONFIG.config());

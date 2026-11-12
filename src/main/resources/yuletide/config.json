@@ -27,7 +27,17 @@
     "gift-drop": {
       "enabled": true,
       "chance": 15.0,
-      "interval": 5
+      "interval": 5,
+      "items": [
+        { "item": "minecraft:diamond", "weight": 1 },
+        { "item": "minecraft:emerald", "weight": 1 },
+        { "item": "minecraft:gold_ingot", "weight": 1 },
+        { "item": "minecraft:golden_apple", "weight": 1 },
+        { "item": "minecraft:enchanted_golden_apple", "weight": 1 },
+        { "item": "minecraft:cookie", "weight": 1 },
+        { "item": "minecraft:cake", "weight": 1 },
+        { "item": "minecraft:pumpkin_pie", "weight": 1 }
+      ]
     },
     "snow-trail": {
       "enabled": true,

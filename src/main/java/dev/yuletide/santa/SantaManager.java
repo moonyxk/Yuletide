@@ -3,6 +3,7 @@ package dev.yuletide.santa;
 import dev.yuletide.MinecraftCompat;
 import dev.yuletide.Yuletide;
 import dev.yuletide.config.Cfg;
+import dev.yuletide.gift.ItemFactory;
 import dev.yuletide.text.Text;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -33,6 +34,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.npc.villager.VillagerType;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -45,14 +47,17 @@ public final class SantaManager {
 	public static final String TAG = "christmas_santa";
 	public static final Pattern TIME_PATTERN = Pattern.compile("^\\d+[smh]$");
 
-	private static final List<net.minecraft.world.item.Item> GIFTS = List.of(
-		Items.DIAMOND, Items.EMERALD, Items.GOLD_INGOT, Items.GOLDEN_APPLE,
-		Items.ENCHANTED_GOLDEN_APPLE, Items.COOKIE, Items.CAKE, Items.PUMPKIN_PIE);
+	record WeightedValue<T>(T value, long weight) {
+	}
+
+	private static final String GIFT_ITEMS_PATH = "santa-claus.gift-drop.items";
 
 	/** Merkt sich eine gesetzte Schneeschicht mit Dimension und Ablaufzeit in Event-Ticks. */
 	private record Trail(ResourceKey<Level> level, BlockPos pos, long expiresAt) {
 	}
 
+	private List<WeightedValue<Item>> giftDrops = defaultGiftDrops();
+	private long giftDropWeightTotal = totalWeight(giftDrops);
 	private @Nullable MinecraftServer server;
 	// UUID als Identitaet, Referenz als schneller Zugriff und Dimensionsschluessel fuer die erneute Suche.
 	private @Nullable UUID santa;
@@ -68,6 +73,73 @@ public final class SantaManager {
 
 	public boolean isRunning() {
 		return santa != null;
+	}
+
+	/** Laedt den Santa-Geschenkpool; fehlende Listen in aelteren Configs behalten den bisherigen Pool. */
+	public void reload() {
+		Cfg config = Yuletide.CONFIG.config();
+		if (!config.has(GIFT_ITEMS_PATH)) {
+			giftDrops = defaultGiftDrops();
+		} else {
+			List<WeightedValue<Item>> configured = new ArrayList<>();
+			List<Cfg> entries = config.list(GIFT_ITEMS_PATH);
+			for (int i = 0; i < entries.size(); i++) {
+				Cfg entry = entries.get(i);
+				String itemId = entry.str("item", "");
+				Item item = ItemFactory.item(itemId);
+				int weight = entry.integer("weight", 1);
+				if (item == null) {
+					Yuletide.LOGGER.warn("[{}[{}]] Unknown item '{}' - skipped", GIFT_ITEMS_PATH, i, itemId);
+					continue;
+				}
+				if (weight <= 0) {
+					Yuletide.LOGGER.warn("[{}[{}]] Weight must be positive - skipped", GIFT_ITEMS_PATH, i);
+					continue;
+				}
+				configured.add(new WeightedValue<>(item, weight));
+			}
+			giftDrops = List.copyOf(configured);
+			if (giftDrops.isEmpty()) {
+				Yuletide.LOGGER.warn("No valid Santa gift-drop items configured; Santa gift drops are disabled");
+			}
+		}
+		giftDropWeightTotal = totalWeight(giftDrops);
+	}
+
+	private static List<WeightedValue<Item>> defaultGiftDrops() {
+		return List.of(
+			new WeightedValue<>(Items.DIAMOND, 1),
+			new WeightedValue<>(Items.EMERALD, 1),
+			new WeightedValue<>(Items.GOLD_INGOT, 1),
+			new WeightedValue<>(Items.GOLDEN_APPLE, 1),
+			new WeightedValue<>(Items.ENCHANTED_GOLDEN_APPLE, 1),
+			new WeightedValue<>(Items.COOKIE, 1),
+			new WeightedValue<>(Items.CAKE, 1),
+			new WeightedValue<>(Items.PUMPKIN_PIE, 1));
+	}
+
+	private static long totalWeight(List<WeightedValue<Item>> values) {
+		long total = 0;
+		for (WeightedValue<Item> value : values) {
+			total += value.weight();
+		}
+		return total;
+	}
+
+	static <T> T chooseWeighted(List<WeightedValue<T>> values, long selection) {
+		if (selection < 0) {
+			throw new IllegalArgumentException("Selection must be non-negative");
+		}
+		for (WeightedValue<T> value : values) {
+			if (value.weight() <= 0) {
+				throw new IllegalArgumentException("Weights must be positive");
+			}
+			if (selection < value.weight()) {
+				return value.value();
+			}
+			selection -= value.weight();
+		}
+		throw new IllegalArgumentException("Selection is outside the configured weight range");
 	}
 
 	/**
@@ -96,7 +168,7 @@ public final class SantaManager {
 		Cfg cfg = Yuletide.CONFIG.config();
 		removeExpiredTrail(false);
 
-		if (cfg.bool("santa-claus.gift-drop.enabled", true)) {
+		if (cfg.bool("santa-claus.gift-drop.enabled", true) && !giftDrops.isEmpty()) {
 			// Konfiguration in Sekunden -> Ticks; Modulo prueft, ob ein Intervall erreicht ist.
 			// Die Prozentchance wird einmal pro Intervall ausgewertet, nicht pro Tick.
 			int interval = Math.max(1, cfg.integer("santa-claus.gift-drop.interval", 5)) * 20;
@@ -112,9 +184,9 @@ public final class SantaManager {
 		}
 	}
 
-	/** Waehlt aus der festen GIFTS-Liste; diese Drops sind unabhaengig von Kalender-Geschenken in gifts.json. */
+	/** Waehlt gewichtet aus der konfigurierten Liste; Santa-Drops sind unabhaengig von gifts.json. */
 	private void dropGift(ServerLevel level, Entity entity) {
-		ItemStack stack = new ItemStack(GIFTS.get(ThreadLocalRandom.current().nextInt(GIFTS.size())), 1);
+		ItemStack stack = new ItemStack(chooseWeighted(giftDrops, ThreadLocalRandom.current().nextLong(giftDropWeightTotal)), 1);
 		level.addFreshEntity(new ItemEntity(level, entity.getX(), entity.getY(), entity.getZ(), stack));
 		level.sendParticles(ParticleTypes.HEART, entity.getX(), entity.getY() + 1, entity.getZ(), 10, 0.5, 0.5, 0.5, 0.1);
 		level.playSound(null, entity.getX(), entity.getY(), entity.getZ(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.5f, 1.5f);

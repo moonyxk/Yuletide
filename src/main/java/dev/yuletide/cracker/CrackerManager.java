@@ -80,7 +80,7 @@ public final class CrackerManager {
 				yield true;
 			}
 			case "COMMAND" -> !reward.str("command", "").isBlank();
-			case "PERMISSION" -> true;
+			case "PERMISSION" -> !reward.str("permission", "").isBlank();
 			default -> false;
 		};
 		if (!valid && !type.equals("ITEM")) {
@@ -151,7 +151,7 @@ public final class CrackerManager {
 
 	private void open(ServerPlayer player, InteractionHand hand, Type type) {
 		// Genau ein Item aus der verwendeten Hand verbrauchen und ALLE konfigurierten
-		// ITEM-/COMMAND-Belohnungen ausgeben; es wird hier nichts zufaellig ausgewaehlt.
+		// Belohnungen ausgeben; es wird hier nichts zufaellig ausgewaehlt.
 		player.getItemInHand(hand).shrink(1);
 		player.sendSystemMessage(Yuletide.MESSAGES.getWithMarkup("crackers.opened", "cracker", type.name()));
 		for (Cfg reward : type.rewards()) {
@@ -169,8 +169,12 @@ public final class CrackerManager {
 					Commands.runAsConsole(player.level().getServer(), reward.str("command", ""), player);
 					player.sendSystemMessage(Yuletide.MESSAGES.get("crackers.received-command-reward"));
 				}
+				case "PERMISSION" -> {
+					String permission = reward.str("permission", "").trim();
+					player.addTag(permission);
+					player.sendSystemMessage(Yuletide.MESSAGES.get("crackers.received-permission", "permission", permission));
+				}
 				default -> {
-					// PERMISSION wird beim Laden akzeptiert, hier aber derzeit nicht ausgefuehrt.
 				}
 			}
 		}

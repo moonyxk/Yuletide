@@ -41,6 +41,7 @@
     "opened": "{prefix}&aYou opened a {cracker}&a!",
     "received-item": "{prefix}&aYou received &e{item} x{amount}&a!",
     "received-command-reward": "{prefix}&aYou received a special reward!",
+    "received-permission": "{prefix}&aYou received the tag &e{permission}&a!",
     "given-to-player": "{prefix}&aYou gave {amount}x {cracker} &ato {player}!",
     "received-from-player": "{prefix}&aYou received {amount}x {cracker} &afrom {player}!",
     "cracker-not-found": "{prefix}&cCracker type '{cracker}' not found!",
